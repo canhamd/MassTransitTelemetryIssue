@@ -1,7 +1,6 @@
 using Azure.Monitor.OpenTelemetry.Exporter;
 using MassTransit;
 using MassTransitTelemetryIssue.V8;
-using Microsoft.ApplicationInsights.DependencyCollector;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Reflection;
@@ -10,26 +9,30 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+var resourceAttributes = new Dictionary<string, object> {
+    { "service.name", "my-service" },
+    { "service.namespace", "my-namespace" },
+    { "service.instance.id", "my-instance" }};
+
 builder.Services.AddOpenTelemetryTracing(telemetryBuilder =>
 {
     telemetryBuilder
-        .SetResourceBuilder(ResourceBuilder.CreateDefault()
-            .AddService(Assembly.GetExecutingAssembly().GetName().Name)
-            .AddTelemetrySdk()
-            .AddEnvironmentVariableDetector())
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
         .AddSource("MassTransit")
-        .AddHttpClientInstrumentation()
+        .AddAspNetCoreInstrumentation()
         .AddEntityFrameworkCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddSqlClientInstrumentation()
         .AddAzureMonitorTraceExporter(opts =>
         {
             opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
         });
 });
 
-builder.Services.AddApplicationInsightsTelemetry(opts =>
-{
-    opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
-});
+//builder.Services.AddApplicationInsightsTelemetry(opts =>
+//{
+//    opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
+//});
 
 //builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((module, o) =>
 //{
