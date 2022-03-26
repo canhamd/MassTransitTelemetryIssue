@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddApplicationInsightsTelemetry(builder.Configuration["APP_INSIGHTS_KEY"]);
 
 builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((module, o) =>
 {
