@@ -3,7 +3,6 @@ using MassTransit;
 using MassTransitTelemetryIssue.V8;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,7 +16,7 @@ var resourceAttributes = new Dictionary<string, object> {
 builder.Services.AddOpenTelemetryTracing(telemetryBuilder =>
 {
     telemetryBuilder
-        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes).AddTelemetrySdk().AddEnvironmentVariableDetector())
         .AddSource("MassTransit")
         .AddAspNetCoreInstrumentation()
         .AddEntityFrameworkCoreInstrumentation()
