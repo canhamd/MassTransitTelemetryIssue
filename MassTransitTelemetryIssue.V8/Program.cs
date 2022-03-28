@@ -1,21 +1,39 @@
 using Azure.Monitor.OpenTelemetry.Exporter;
 using MassTransit;
 using MassTransitTelemetryIssue.V8;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddOpenTelemetry(openTelemetryLoggerOptions =>
+{
+    openTelemetryLoggerOptions.AddConsoleExporter();
+});
+
 // Add services to the container.
+
+builder.Services.AddOpenTelemetryMetrics(meterProviderBuilder =>
+{
+    meterProviderBuilder
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddConsoleExporter();
+});
 
 var resourceAttributes = new Dictionary<string, object> {
     { "service.name", "my-service" },
     { "service.namespace", "my-namespace" },
-    { "service.instance.id", "my-instance" }};
+    { "service.instance.id", "my-instance" }
+};
 
-builder.Services.AddOpenTelemetryTracing(telemetryBuilder =>
+builder.Services.AddOpenTelemetryTracing(traceProviderBuilder =>
 {
-    telemetryBuilder
+    traceProviderBuilder
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes).AddTelemetrySdk().AddEnvironmentVariableDetector())
         .AddSource("MassTransit")
         .AddAspNetCoreInstrumentation()
@@ -25,6 +43,20 @@ builder.Services.AddOpenTelemetryTracing(telemetryBuilder =>
         .AddAzureMonitorTraceExporter(opts =>
         {
             opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
+        })
+        .AddJaegerExporter(o =>
+        {
+            o.AgentHost = "localhost";
+            o.AgentPort = 6831;
+            o.MaxPayloadSizeInBytes = 4096;
+            o.ExportProcessorType = ExportProcessorType.Batch;
+            o.BatchExportProcessorOptions = new BatchExportProcessorOptions<Activity>
+            {
+                MaxQueueSize = 2048,
+                ScheduledDelayMilliseconds = 5000,
+                ExporterTimeoutMilliseconds = 30000,
+                MaxExportBatchSize = 512,
+            };
         });
 });
 
