@@ -20,6 +20,7 @@ builder.Logging.AddOpenTelemetry(openTelemetryLoggerOptions =>
 builder.Services.AddOpenTelemetryMetrics(meterProviderBuilder =>
 {
     meterProviderBuilder
+        .AddMeter("Custom.Meter")
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddConsoleExporter();

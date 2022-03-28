@@ -5,7 +5,6 @@ namespace MassTransitTelemetryIssue.V8
     public interface SubmitOrder
     {
         public Guid OrderId { get; }
-
     }
 
     public interface OrderAccepted
