@@ -7,6 +7,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,30 +18,32 @@ builder.Logging.AddOpenTelemetry(openTelemetryLoggerOptions =>
 
 // Add services to the container.
 
-builder.Services.AddOpenTelemetryMetrics(meterProviderBuilder =>
-{
-    meterProviderBuilder
-        .AddMeter("Custom.Meter")
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddConsoleExporter();
-});
-
 var resourceAttributes = new Dictionary<string, object> {
     { "service.name", "my-service" },
     { "service.namespace", "my-namespace" },
     { "service.instance.id", "my-instance" }
 };
 
+builder.Services.AddOpenTelemetryMetrics(meterProviderBuilder =>
+{
+    meterProviderBuilder
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddMeter("Test.Meter")
+        .AddMeter("Custom.Meter")
+        .AddConsoleExporter();
+});
+
 builder.Services.AddOpenTelemetryTracing(traceProviderBuilder =>
 {
     traceProviderBuilder
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes).AddTelemetrySdk().AddEnvironmentVariableDetector())
-        .AddSource("MassTransit")
         .AddAspNetCoreInstrumentation()
         .AddEntityFrameworkCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddSqlClientInstrumentation()
+        .AddSource("MassTransit")
         .AddAzureMonitorTraceExporter(opts =>
         {
             opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
@@ -89,6 +92,26 @@ builder.Services.AddMassTransit(config =>
 });
 
 var app = builder.Build();
+
+var meter = new Meter("Test.Meter");
+var requestCounter = meter.CreateCounter<long>("RequestCounter");
+
+Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");
+Counter<int> s_hatsSold = s_meter.CreateCounter<int>(name: "hats-sold", unit: "Hats", description: "The number of hats sold in our store");
+
+using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
+    .AddMeter("HatCo.HatStore")
+    .AddConsoleExporter()
+    .Build();
+
+app.MapGet("/Metric", async (ILogger<Program> logger) =>
+{
+    requestCounter.Add(1);
+
+    s_hatsSold.Add(4);
+
+    return await Task.FromResult("Ok");
+});
 
 // Configure the HTTP request pipeline.
 

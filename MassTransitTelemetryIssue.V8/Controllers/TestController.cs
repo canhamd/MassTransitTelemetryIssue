@@ -17,7 +17,7 @@ namespace MassTransitTelemetryIssue.V8.Controllers
         [HttpGet("[action]")]
         public async Task<IActionResult> SubmitOrder([FromServices] IRequestClient<SubmitOrder> requestClient)
         {
-            Meters.CustomCounter.Add(1, new("name", "xxx"), new("attr-2", "yyy"));
+            Meters.CustomCounter.Add(1);
 
             var response = await requestClient.GetResponse<OrderAccepted>(new
             {
