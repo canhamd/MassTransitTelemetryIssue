@@ -93,8 +93,37 @@ builder.Services.AddMassTransit(config =>
 
 var app = builder.Build();
 
-var meter = new Meter("Test.Meter");
-var requestCounter = meter.CreateCounter<long>("RequestCounter");
+
+
+MeterListener listener = new MeterListener();
+
+listener.InstrumentPublished = (instrument, meterListener) =>
+{
+    if (instrument.Name == "Requests" && instrument.Meter.Name == "io.opentelemetry.contrib.mongodb")
+    {
+        meterListener.EnableMeasurementEvents(instrument, null);
+    }
+};
+
+listener.SetMeasurementEventCallback<int>((instrument, measurement, tags, state) =>
+{
+    Console.WriteLine($"Instrument: {instrument.Name} has recorded the measurement {measurement}");
+});
+
+listener.Start();
+
+
+Meter meter = new Meter("io.opentelemetry.contrib.mongodb", "v1.0");
+
+Counter<int> counter = meter.CreateCounter<int>("Requests");
+
+counter.Add(1);
+counter.Add(1, KeyValuePair.Create<string, object?>("request", "read"));
+
+
+
+var testMeter = new Meter("Test.Meter");
+var requestCounter = testMeter.CreateCounter<long>("RequestCounter");
 
 Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");
 Counter<int> s_hatsSold = s_meter.CreateCounter<int>(name: "hats-sold", unit: "Hats", description: "The number of hats sold in our store");
@@ -106,12 +135,18 @@ using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
 
 app.MapGet("/Metric", async (ILogger<Program> logger) =>
 {
+    counter.Add(2);
+    counter.Add(3, KeyValuePair.Create<string, object?>("request", "read"));
+
     requestCounter.Add(1);
 
     s_hatsSold.Add(4);
 
     return await Task.FromResult("Ok");
 });
+
+
+
 
 // Configure the HTTP request pipeline.
 
