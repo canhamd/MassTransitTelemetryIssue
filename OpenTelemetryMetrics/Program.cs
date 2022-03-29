@@ -17,6 +17,7 @@
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 
 namespace GettingStarted;
 
