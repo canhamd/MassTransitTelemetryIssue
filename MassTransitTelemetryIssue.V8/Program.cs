@@ -22,12 +22,18 @@ var resourceAttributes = new Dictionary<string, object> {
 Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");
 Counter<int> s_hatsSold = s_meter.CreateCounter<int>(name: "hats-sold", unit: "Hats", description: "The number of hats sold in our store");
 
-using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
-    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
-    .AddMeter("HatCo.HatStore")
-    .AddMeter("Custom.Meter")
-    .AddConsoleExporter()
-    .Build();
+//using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
+//    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
+//    .AddHttpClientInstrumentation()
+//    .AddAspNetCoreInstrumentation()
+//    .AddMeter("HatCo.HatStore")
+//    .AddMeter("Custom.Meter")
+//    .AddConsoleExporter((exporterConfig, readerConfig) =>
+//    {
+//        readerConfig.MetricReaderType = MetricReaderType.Periodic;
+//        readerConfig.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5000;
+//    })
+//    .Build();
 
 // does not matter if listener comes before or after instrument creation,
 // except in regards to not listening to events emitted prior to creation
@@ -139,7 +145,7 @@ app.MapGet("/Metric", async (ILogger<Program> logger) =>
 {
     s_hatsSold.Add(4);
 
-    CustomCounter.Add(5);
+    CustomCounter.Add(5, new KeyValuePair<string, object?>("tag-api-type", "minimal api"), new KeyValuePair<string, object?>("tag-url", "/Metric"));
 
     return await Task.FromResult("Ok");
 });
