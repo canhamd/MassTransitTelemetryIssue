@@ -28,6 +28,20 @@ public class Program
 
     public static void Main()
     {
+        MeterListener listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Name == "MyFruitCounter" && instrument.Meter.Name == "MyCompany.MyProduct.MyLibrary")
+            {
+                meterListener.EnableMeasurementEvents(instrument, null);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
+        {
+            Console.WriteLine($"Instrument: {instrument.Name} has recorded the measurement {measurement}");
+        });
+        listener.Start();
+
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddMeter("MyCompany.MyProduct.MyLibrary")
             .AddConsoleExporter()

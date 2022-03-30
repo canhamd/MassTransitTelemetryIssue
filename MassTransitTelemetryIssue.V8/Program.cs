@@ -1,4 +1,3 @@
-using Azure.Monitor.OpenTelemetry.Exporter;
 using MassTransit;
 using MassTransitTelemetryIssue.V8;
 using OpenTelemetry;
@@ -9,14 +8,7 @@ using OpenTelemetry.Trace;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Logging.AddOpenTelemetry(openTelemetryLoggerOptions =>
-{
-    openTelemetryLoggerOptions.AddConsoleExporter();
-});
-
-// Add services to the container.
+using static MassTransitTelemetryIssue.V8.Meters;
 
 var resourceAttributes = new Dictionary<string, object> {
     { "service.name", "my-service" },
@@ -24,15 +16,67 @@ var resourceAttributes = new Dictionary<string, object> {
     { "service.instance.id", "my-instance" }
 };
 
+// without this the listener isn't aware of it before the first measurement is emitted
+//var enabled = CustomCounter.Enabled;
+
+Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");
+Counter<int> s_hatsSold = s_meter.CreateCounter<int>(name: "hats-sold", unit: "Hats", description: "The number of hats sold in our store");
+
+using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
+    .AddMeter("HatCo.HatStore")
+    .AddMeter("Custom.Meter")
+    .AddConsoleExporter()
+    .Build();
+
+// does not matter if listener comes before or after instrument creation,
+// except in regards to not listening to events emitted prior to creation
+MeterListener listener = new MeterListener();
+listener.InstrumentPublished = (instrument, meterListener) =>
+{
+    if (instrument.Name == "CustomCounter" && instrument.Meter.Name == "Custom.Meter")
+    {
+        meterListener.EnableMeasurementEvents(instrument, null);
+    }
+    else if (instrument.Name == "hats-sold" && instrument.Meter.Name == "HatCo.HatStore")
+    {
+        meterListener.EnableMeasurementEvents(instrument, null);
+    }
+};
+listener.SetMeasurementEventCallback<int>((instrument, measurement, tags, state) =>
+{
+    Console.WriteLine($"Instrument: {instrument.Name} has recorded the measurement {measurement}");
+});
+listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
+{
+    Console.WriteLine($"Instrument: {instrument.Name} has recorded the measurement {measurement}");
+});
+listener.Start();
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.AddOpenTelemetry(openTelemetryLoggerOptions =>
+{
+    openTelemetryLoggerOptions
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
+        .AddConsoleExporter();
+});
+
+// Add services to the container.
+
 builder.Services.AddOpenTelemetryMetrics(meterProviderBuilder =>
 {
     meterProviderBuilder
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(resourceAttributes))
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
-        .AddMeter("Test.Meter")
         .AddMeter("Custom.Meter")
-        .AddConsoleExporter();
+        .AddMeter("HatCo.HatStore")
+        .AddConsoleExporter((exporterConfig, readerConfig) =>
+        {
+            readerConfig.MetricReaderType = MetricReaderType.Periodic;
+            readerConfig.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5000;
+        });
 });
 
 builder.Services.AddOpenTelemetryTracing(traceProviderBuilder =>
@@ -44,10 +88,8 @@ builder.Services.AddOpenTelemetryTracing(traceProviderBuilder =>
         .AddHttpClientInstrumentation()
         .AddSqlClientInstrumentation()
         .AddSource("MassTransit")
-        .AddAzureMonitorTraceExporter(opts =>
-        {
-            opts.ConnectionString = builder.Configuration.GetConnectionString("APP_INSIGHTS_CONNECTION_STRING");
-        })
+        .AddSource("Test.Meter")
+        .AddConsoleExporter()
         .AddJaegerExporter(o =>
         {
             o.AgentHost = "localhost";
@@ -93,60 +135,14 @@ builder.Services.AddMassTransit(config =>
 
 var app = builder.Build();
 
-
-
-MeterListener listener = new MeterListener();
-
-listener.InstrumentPublished = (instrument, meterListener) =>
-{
-    if (instrument.Name == "Requests" && instrument.Meter.Name == "io.opentelemetry.contrib.mongodb")
-    {
-        meterListener.EnableMeasurementEvents(instrument, null);
-    }
-};
-
-listener.SetMeasurementEventCallback<int>((instrument, measurement, tags, state) =>
-{
-    Console.WriteLine($"Instrument: {instrument.Name} has recorded the measurement {measurement}");
-});
-
-listener.Start();
-
-
-Meter meter = new Meter("io.opentelemetry.contrib.mongodb", "v1.0");
-
-Counter<int> counter = meter.CreateCounter<int>("Requests");
-
-counter.Add(1);
-counter.Add(1, KeyValuePair.Create<string, object?>("request", "read"));
-
-
-
-var testMeter = new Meter("Test.Meter");
-var requestCounter = testMeter.CreateCounter<long>("RequestCounter");
-
-Meter s_meter = new Meter("HatCo.HatStore", "1.0.0");
-Counter<int> s_hatsSold = s_meter.CreateCounter<int>(name: "hats-sold", unit: "Hats", description: "The number of hats sold in our store");
-
-using MeterProvider meterProvider = Sdk.CreateMeterProviderBuilder()
-    .AddMeter("HatCo.HatStore")
-    .AddConsoleExporter()
-    .Build();
-
 app.MapGet("/Metric", async (ILogger<Program> logger) =>
 {
-    counter.Add(2);
-    counter.Add(3, KeyValuePair.Create<string, object?>("request", "read"));
-
-    requestCounter.Add(1);
-
     s_hatsSold.Add(4);
+
+    CustomCounter.Add(5);
 
     return await Task.FromResult("Ok");
 });
-
-
-
 
 // Configure the HTTP request pipeline.
 
